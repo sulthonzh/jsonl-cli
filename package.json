@@ -1,6 +1,6 @@
 {
   "name": "jsonl-cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "CLI toolkit for JSON Lines — filter, select, count, pretty-print JSONL files",
   "main": "dist/index.js",
   "bin": { "jsonl": "dist/cli.js" },

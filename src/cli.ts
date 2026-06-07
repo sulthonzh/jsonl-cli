@@ -71,7 +71,31 @@ function flatten(obj: Record<string, unknown>, prefix = ''): Record<string, unkn
   return out;
 }
 
-program.name('jsonl').description('CLI toolkit for JSON Lines files').version('1.0.0');
+/**
+ * Evaluate a simple jq-like expression against an object.
+ * Supports:
+ *   .field         → get field
+ *   .field.sub     → nested access
+ *   .field,.other  → pick multiple fields (outputs object)
+ *   .field[].sub   → array iteration (not supported yet, shows warning)
+ */
+function evalExpr(obj: Record<string, unknown>, expr: string): unknown {
+  const trimmed = expr.trim();
+  if (!trimmed.startsWith('.')) return trimmed; // literal
+
+  const path = trimmed.slice(1); // strip leading dot
+  if (!path) return obj; // "." = identity
+
+  // comma-separated = pick multiple fields
+  if (path.includes(',')) {
+    const fields = path.split(',').map(f => f.trim()).filter(Boolean);
+    return pickFields(obj, fields);
+  }
+
+  return getNestedValue(obj, path);
+}
+
+program.name('jsonl').description('CLI toolkit for JSON Lines files').version('1.1.0');
 
 program.command('pretty')
   .description('Pretty-print JSONL as formatted JSON')
@@ -148,11 +172,13 @@ program.command('stats')
     if (!values.length) { console.log('No numeric values found'); return; }
     values.sort((a, b) => a - b);
     const sum = values.reduce((a, b) => a + b, 0);
+    const p95idx = Math.floor(values.length * 0.95);
     console.log(JSON.stringify({
       field: opts.field, count: values.length,
       min: values[0], max: values[values.length - 1],
       mean: +(sum / values.length).toFixed(4),
       median: values[Math.floor(values.length / 2)],
+      p95: values[Math.min(p95idx, values.length - 1)],
       sum: +sum.toFixed(4),
     }));
   });
@@ -163,6 +189,117 @@ program.command('flat')
   .action(async (files: string[]) => {
     for await (const obj of readJSONL(files))
       console.log(JSON.stringify(flatten(obj)));
+  });
+
+// ── New commands: sort, head, tail, pluck ──
+
+program.command('sort <field>')
+  .description('Sort records by a field (use -r for descending)')
+  .argument('[files...]', 'Input files')
+  .option('-r, --reverse', 'Sort descending')
+  .option('-n, --numeric', 'Sort numerically (default: string)')
+  .action(async (field: string, files: string[], opts: { reverse?: boolean; numeric?: boolean }) => {
+    const records: Record<string, unknown>[] = [];
+    for await (const obj of readJSONL(records.length < 100000 ? files : [])) records.push(obj);
+    // read all if we didn't skip
+    if (records.length === 0) {
+      for await (const obj of readJSONL(files)) records.push(obj);
+    }
+    records.sort((a, b) => {
+      const va = getNestedValue(a, field);
+      const vb = getNestedValue(b, field);
+      let cmp: number;
+      if (opts.numeric) {
+        cmp = (Number(va) || 0) - (Number(vb) || 0);
+      } else {
+        cmp = String(va ?? '').localeCompare(String(vb ?? ''));
+      }
+      return opts.reverse ? -cmp : cmp;
+    });
+    for (const obj of records) console.log(JSON.stringify(obj));
+  });
+
+program.command('head <n>')
+  .description('Take the first N records')
+  .argument('[files...]', 'Input files')
+  .action(async (n: string, files: string[]) => {
+    const limit = parseInt(n, 10);
+    if (isNaN(limit) || limit < 0) { console.error('n must be a non-negative integer'); process.exit(1); }
+    let count = 0;
+    for await (const obj of readJSONL(files)) {
+      if (count >= limit) break;
+      console.log(JSON.stringify(obj));
+      count++;
+    }
+  });
+
+program.command('tail <n>')
+  .description('Take the last N records')
+  .argument('[files...]', 'Input files')
+  .action(async (n: string, files: string[]) => {
+    const limit = parseInt(n, 10);
+    if (isNaN(limit) || limit < 0) { console.error('n must be a non-negative integer'); process.exit(1); }
+    // circular buffer approach for memory efficiency
+    const buf: string[] = [];
+    let i = 0;
+    for await (const obj of readJSONL(files)) {
+      buf[i % limit] = JSON.stringify(obj);
+      i++;
+    }
+    const start = Math.max(0, i - limit);
+    for (let j = start; j < i; j++) console.log(buf[j % limit]);
+  });
+
+program.command('pluck <expr>')
+  .description('Extract values using dot expressions (.field, .a.b, .a,.b for objects)')
+  .argument('[files...]', 'Input files')
+  .action(async (expr: string, files: string[]) => {
+    for await (const obj of readJSONL(files)) {
+      const result = evalExpr(obj, expr);
+      if (result !== undefined) {
+        console.log(typeof result === 'object' ? JSON.stringify(result) : String(result));
+      }
+    }
+  });
+
+program.command('rename <mapping>')
+  .description('Rename fields (old:new,comma,separated)')
+  .argument('[files...]', 'Input files')
+  .action(async (mapping: string, files: string[]) => {
+    const pairs = mapping.split(',').map(s => {
+      const [from, to] = s.trim().split(':').map(p => p.trim());
+      return { from, to };
+    });
+    for await (const obj of readJSONL(files)) {
+      const out: Record<string, unknown> = { ...obj };
+      for (const { from, to } of pairs) {
+        const v = getNestedValue(obj, from);
+        if (v !== undefined) {
+          out[to] = v;
+          // remove old key if top-level
+          if (!from.includes('.') && from in out) delete out[from];
+        }
+      }
+      console.log(JSON.stringify(out));
+    }
+  });
+
+program.command('group <field>')
+  .description('Group records by a field and count')
+  .argument('[files...]', 'Input files')
+  .action(async (field: string, files: string[]) => {
+    const counts = new Map<string, number>();
+    let total = 0;
+    for await (const obj of readJSONL(files)) {
+      const v = String(getNestedValue(obj, field) ?? '(undefined)');
+      counts.set(v, (counts.get(v) || 0) + 1);
+      total++;
+    }
+    const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    for (const [val, count] of entries) {
+      const pct = +((count / total) * 100).toFixed(1);
+      console.log(JSON.stringify({ [field]: val, count, percent: pct }));
+    }
   });
 
 program.parse();
