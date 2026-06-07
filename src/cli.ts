@@ -95,7 +95,7 @@ function evalExpr(obj: Record<string, unknown>, expr: string): unknown {
   return getNestedValue(obj, path);
 }
 
-program.name('jsonl').description('CLI toolkit for JSON Lines files').version('1.1.0');
+program.name('jsonl').description('CLI toolkit for JSON Lines files').version('1.2.0');
 
 program.command('pretty')
   .description('Pretty-print JSONL as formatted JSON')
@@ -300,6 +300,85 @@ program.command('group <field>')
       const pct = +((count / total) * 100).toFixed(1);
       console.log(JSON.stringify({ [field]: val, count, percent: pct }));
     }
+  });
+
+
+program.command('schema')
+  .description('Infer JSON schema from JSONL records')
+  .argument('[files...]', 'Input files')
+  .option('-s, --sample <n>', 'Sample N records for inference (default: all)', '0')
+  .action(async (files: string[], opts: { sample: string }) => {
+    const fieldTypes = new Map<string, Set<string>>();
+    const fieldNull = new Map<string, number>();
+    let total = 0;
+    const limit = parseInt(opts.sample, 10) || Infinity;
+
+    for await (const obj of readJSONL(files)) {
+      if (total >= limit) break;
+      total++;
+      const flat = flatten(obj);
+      for (const [k, v] of Object.entries(flat)) {
+        if (!fieldTypes.has(k)) fieldTypes.set(k, new Set());
+        if (v === null || v === undefined) {
+          fieldNull.set(k, (fieldNull.get(k) || 0) + 1);
+        } else {
+          const t = Array.isArray(v) ? 'array' : typeof v;
+          fieldTypes.get(k)!.add(t);
+        }
+      }
+    }
+
+    const schema: Record<string, unknown> = { type: 'object', properties: {} as Record<string, unknown> };
+    const props = schema.properties as Record<string, unknown>;
+    const allFields = [...fieldTypes.keys()].sort();
+
+    for (const field of allFields) {
+      const types = fieldTypes.get(field)!;
+      const nullCount = fieldNull.get(field) || 0;
+      const inferred = types.size === 0 ? ['null'] : [...types];
+      const prop: Record<string, unknown> = {
+        types: inferred,
+        required: nullCount === 0,
+        presence: +(((total - nullCount) / total) * 100).toFixed(1) + '%',
+      };
+      if (types.size === 1 && types.has('number')) {
+        prop.note = 'integer candidates: check if values are always whole numbers';
+      }
+      props[field] = prop;
+    }
+
+    console.log(JSON.stringify({ recordCount: total, fields: allFields.length, schema }, null, 2));
+  });
+
+program.command('freq <field>')
+  .description('Show top-N frequency distribution for a field')
+  .argument('[files...]', 'Input files')
+  .option('-n, --top <n>', 'Show top N values', '10')
+  .action(async (field: string, files: string[], opts: { top: string }) => {
+    const counts = new Map<string, number>();
+    let total = 0;
+    const topN = parseInt(opts.top, 10) || 10;
+
+    for await (const obj of readJSONL(files)) {
+      total++;
+      const v = getNestedValue(obj, field);
+      const key = v === undefined ? '(missing)' : String(v);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+
+    if (total === 0) { console.error('No records found'); process.exit(1); }
+
+    const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN);
+    const unique = counts.size;
+
+    console.log(JSON.stringify({
+      field, totalRecords: total, uniqueValues: unique,
+      distribution: entries.map(([value, count]) => ({
+        value,
+        count,
+        percent: +((count / total) * 100).toFixed(2),
+      })),
+    }, null, 2));
   });
 
 program.parse();

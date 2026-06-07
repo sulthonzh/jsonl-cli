@@ -122,6 +122,22 @@ cat logs.jsonl | jsonl stats --field response_time
 # → {"field":"response_time","count":1500,"min":12,"max":4500,"mean":234.5,"median":180,"p95":890,"sum":351750}
 ```
 
+### Schema inference
+
+```bash
+cat logs.jsonl | jsonl schema
+# Infers field types, required/optional, and presence from your data
+```
+
+### Frequency distribution
+
+```bash
+# Top 5 most common values for a field
+cat logs.jsonl | jsonl freq level -n 5
+# {"field":"level","totalRecords":1000,"uniqueValues":3,
+#  "distribution":[{"value":"info","count":800,"percent":80},...]}
+```
+
 ### Flatten
 
 ```bash
@@ -153,6 +169,12 @@ cat traffic.jsonl | jsonl sample 0.05 > sample.jsonl
 
 # Pull just the error messages
 cat logs.jsonl | jsonl filter 'level=error' | jsonl pluck '.message'
+
+# What does my data look like?
+cat logs.jsonl | jsonl schema
+
+# Most common user agents
+cat api.jsonl | jsonl freq user_agent -n 5
 ```
 
 ## Commands
@@ -173,6 +195,8 @@ cat logs.jsonl | jsonl filter 'level=error' | jsonl pluck '.message'
 | `uniq` | Unique values for a field |
 | `stats` | Numeric stats (min, max, mean, median, p95) |
 | `flat` | Flatten nested objects |
+| `schema` | Infer JSON schema from data |
+| `freq` | Top-N frequency distribution |
 
 ## License
 
