@@ -1,0 +1,5 @@
+{"level":"info","message":"Server started","timestamp":"2026-06-07T00:01:00Z","response_time":45,"user":{"id":"u1","email":"a@test.com"}}
+{"level":"error","message":"Database timeout","timestamp":"2026-06-07T00:02:00Z","response_time":3200,"user":{"id":"u2","email":"b@test.com"}}
+{"level":"warn","message":"Slow query detected","timestamp":"2026-06-07T00:03:00Z","response_time":1500,"user":{"id":"u1","email":"a@test.com"}}
+{"level":"info","message":"Request completed","timestamp":"2026-06-07T00:04:00Z","response_time":80,"user":{"id":"u3","email":"c@test.com"}}
+{"level":"error","message":"Connection refused","timestamp":"2026-06-07T00:05:00Z","response_time":50,"user":{"id":"u2","email":"b@test.com"}}
