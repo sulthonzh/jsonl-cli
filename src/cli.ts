@@ -88,7 +88,7 @@ function evalExpr(obj: Record<string, unknown>, expr: string): unknown {
 
   // comma-separated = pick multiple fields
   if (path.includes(',')) {
-    const fields = path.split(',').map(f => f.trim()).filter(Boolean);
+    const fields = path.split(',').map(f => f.trim().replace(/^\./, '')).filter(Boolean);
     return pickFields(obj, fields);
   }
 

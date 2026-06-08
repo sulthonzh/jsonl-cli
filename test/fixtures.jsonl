@@ -1,0 +1,8 @@
+{"level":"info","msg":"server started","status":200}
+{"level":"error","msg":"timeout","status":500}
+{"level":"warn","msg":"slow query","status":200}
+{"level":"error","msg":"connection lost","status":503}
+{"level":"info","msg":"request done","status":200}
+{"level":"debug","msg":"trace","status":200,"meta":{"latency":12}}
+{"level":"info","msg":"ok","status":201,"meta":{"latency":5}}
+{"level":"error","msg":"timeout again","status":504,"meta":{"latency":999}}

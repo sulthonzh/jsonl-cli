@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
-    "test": "jest"
+    "test": "node test/cli.test.mjs", "test:ci": "node test/cli.test.mjs"
   },
   "keywords": [
     "jsonl",
