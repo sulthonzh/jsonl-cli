@@ -200,11 +200,7 @@ program.command('sort <field>')
   .option('-n, --numeric', 'Sort numerically (default: string)')
   .action(async (field: string, files: string[], opts: { reverse?: boolean; numeric?: boolean }) => {
     const records: Record<string, unknown>[] = [];
-    for await (const obj of readJSONL(records.length < 100000 ? files : [])) records.push(obj);
-    // read all if we didn't skip
-    if (records.length === 0) {
-      for await (const obj of readJSONL(files)) records.push(obj);
-    }
+    for await (const obj of readJSONL(files)) records.push(obj);
     records.sort((a, b) => {
       const va = getNestedValue(a, field);
       const vb = getNestedValue(b, field);
@@ -379,6 +375,66 @@ program.command('freq <field>')
         percent: +((count / total) * 100).toFixed(2),
       })),
     }, null, 2));
+  });
+
+program.command('validate')
+  .description('Validate JSONL file — report malformed lines')
+  .argument('[files...]', 'Input files')
+  .option('-q, --quiet', 'Only show errors (no summary when all valid)')
+  .action(async (files: string[], opts: { quiet?: boolean }) => {
+    let total = 0, valid = 0, invalid = 0;
+    const errors: { line: number; error: string; content: string }[] = [];
+
+    const sources = files.length > 0 ? files : ['-'];
+    for (const src of sources) {
+      const stream = src === '-' ? process.stdin : createReadStream(src, 'utf-8');
+      const rl = createInterface({ input: stream, crlfDelay: Infinity });
+      for await (const line of rl) {
+        const t = line.trim();
+        if (!t) continue;
+        total++;
+        try {
+          JSON.parse(t);
+          valid++;
+        } catch (e) {
+          invalid++;
+          errors.push({ line: total, error: (e as Error).message, content: t.length > 80 ? t.slice(0, 77) + '...' : t });
+        }
+      }
+    }
+
+    if (invalid > 0) {
+      console.error(`\n❌ ${invalid} invalid line(s) found:\n`);
+      for (const err of errors) {
+        console.error(`  Line ${err.line}: ${err.error}`);
+        console.error(`  ${err.content}\n`);
+      }
+      console.error(`Total: ${total} | Valid: ${valid} | Invalid: ${invalid}`);
+      process.exit(1);
+    } else if (!opts.quiet) {
+      console.log(`✅ All ${total} lines are valid JSONL`);
+    }
+  });
+
+program.command('agg')
+  .description('Aggregate a numeric field (sum, avg, min, max)')
+  .requiredOption('-f, --field <name>', 'Numeric field to aggregate')
+  .argument('[files...]', 'Input files')
+  .action(async (files: string[], opts: { field: string }) => {
+    let sum = 0, count = 0, min = Infinity, max = -Infinity;
+    for await (const obj of readJSONL(files)) {
+      const v = Number(getNestedValue(obj, opts.field));
+      if (isNaN(v)) continue;
+      sum += v;
+      count++;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    if (count === 0) { console.log(JSON.stringify({ field: opts.field, count: 0 })); return; }
+    console.log(JSON.stringify({
+      field: opts.field, count, sum: +sum.toFixed(4),
+      avg: +(sum / count).toFixed(4), min, max,
+    }));
   });
 
 program.parse();

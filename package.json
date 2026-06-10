@@ -1,6 +1,6 @@
 {
   "name": "jsonl-cli",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "CLI toolkit for JSON Lines — filter, select, count, pretty-print JSONL files",
   "main": "dist/index.js",
   "bin": {
@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
-    "test": "node test/cli.test.mjs", "test:ci": "node test/cli.test.mjs"
+    "test": "node test/cli.test.mjs",
+    "test:ci": "node test/cli.test.mjs"
   },
   "keywords": [
     "jsonl",
@@ -22,14 +23,14 @@
   "author": "sulthonzh",
   "license": "MIT",
   "dependencies": {
-    "commander": "^12.0.0",
-    "chalk": "^5.3.0"
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.19.42",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.0",
-    "@types/jest": "^29.5.0"
+    "typescript": "^5.4.0"
   }
 }

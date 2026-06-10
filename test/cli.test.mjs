@@ -177,3 +177,52 @@ test('stdin pipe', () => {
 
 console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);
 if (failed > 0) process.exit(1);
+
+// ── New tests: validate, agg ──
+import { writeFileSync, unlinkSync, mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+
+const tmp = mkdtempSync(join(tmpdir(), 'jsonl-test-'));
+const validFix = join(tmp, 'valid.jsonl');
+const mixedFix = join(tmp, 'mixed.jsonl');
+
+writeFileSync(validFix, `{"a":1}\n{"a":2}\n{"a":3}\n`);
+writeFileSync(mixedFix, `{"a":1}\nbad line\n{"a":2}\nalso broken\n{"a":3}\n`);
+
+test('validate - all valid', () => {
+  const out = run(`validate ${validFix}`);
+  assert(out.includes('All 3 lines are valid JSONL'), `got: ${out}`);
+});
+
+test('validate - mixed file shows errors', () => {
+  const result = run(`validate ${mixedFix}`);
+  assert(result.error === true, 'should exit with error');
+  assert(result.stderr.includes('2 invalid line'), `got: ${result.stderr}`);
+});
+
+test('validate - quiet mode on valid', () => {
+  const out = run(`validate --quiet ${validFix}`);
+  assert(out.trim() === '', `quiet should produce no output on valid, got: ${out}`);
+});
+
+test('agg - basic aggregation', () => {
+  const out = run(`agg -f status ${fixture}`);
+  const parsed = JSON.parse(out.trim());
+  assert(parsed.count === 8, `expected count 8, got ${parsed.count}`);
+  assert(parsed.min === 200, `min should be 200`);
+  assert(parsed.max === 504, `max should be 504`);
+  assert(parsed.sum > 0, 'sum should be positive');
+});
+
+test('agg - empty field', () => {
+  const out = run(`agg -f nonexistent ${fixture}`);
+  const parsed = JSON.parse(out.trim());
+  assert(parsed.count === 0, 'should have 0 count for missing field');
+});
+
+// cleanup
+try { unlinkSync(validFix); } catch {}
+try { unlinkSync(mixedFix); } catch {}
+try { unlinkSync(join(tmp, ''));
+} catch {}
+
