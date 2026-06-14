@@ -55,7 +55,7 @@ async function* readJSONL(files: string[]): AsyncGenerator<Record<string, unknow
     for await (const line of rl) {
       const t = line.trim();
       if (!t) continue;
-      try { yield JSON.parse(t); } catch { /* skip */ }
+      try { yield JSON.parse(t); } catch {}
     }
   }
 }
@@ -83,10 +83,9 @@ function evalExpr(obj: Record<string, unknown>, expr: string): unknown {
   const trimmed = expr.trim();
   if (!trimmed.startsWith('.')) return trimmed; // literal
 
-  const path = trimmed.slice(1); // strip leading dot
+  const path = trimmed.slice(1);
   if (!path) return obj; // "." = identity
 
-  // comma-separated = pick multiple fields
   if (path.includes(',')) {
     const fields = path.split(',').map(f => f.trim().replace(/^\./, '')).filter(Boolean);
     return pickFields(obj, fields);
@@ -190,8 +189,6 @@ program.command('flat')
     for await (const obj of readJSONL(files))
       console.log(JSON.stringify(flatten(obj)));
   });
-
-// ── New commands: sort, head, tail, pluck ──
 
 program.command('sort <field>')
   .description('Sort records by a field (use -r for descending)')
